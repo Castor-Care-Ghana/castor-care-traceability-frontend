@@ -17,15 +17,15 @@ const Header = () => {
 
   return (
     <header className="shadow-lg">
-      <div className="flex items-center justify-between mx-4 py-2">
+      <div className="flex items-center justify-between mx-4 ">
        
-        <img src={logo} alt="Castorcare Logo" className="h-15" />
+        <img src={logo} alt="Castorcare Logo" className="h-22" />
 
-        <form className="flex items-center">
+        {/* <form className="flex items-center">
           <input
             type="text"
             placeholder="Search your dashboard here..."
-            className="rounded shadow-lg w-[50vw] px-3 py-2"
+            className="rounded shadow-lg w-[40vw] px-3 py-2"
           />
           <button
             className="shadow-lg rounded px-2 py-2 flex items-center bg-green-600"
@@ -33,23 +33,25 @@ const Header = () => {
           >
             <Search className="text-white" />
           </button>
-        </form>
+        </form> */}
 
+        <div className="flex items-center space-x-4 mr-5">
         <div className="space-x-3">
-          <button className="rounded-xl bg-green-600 text-white px-2 py-2">
+          <button className="rounded-xl bg-green-600 text-white px-1.5 py-1.5">
             <Bell />
           </button>
-          <button className="rounded-xl bg-green-600 text-white px-2 py-2">
+          <button className="rounded-xl bg-green-600 text-white px-1.5 py-1.5">
             <CalendarDays />
           </button>
         </div>
 
         <div>
-          <span>
-            <h1 className="font-bold">{weekday}</h1>
+          <span >
+            <h2 className="font-bold">{weekday}</h2>
             <h3 className="text-green-600">{formattedDate}</h3>
           </span>
         </div>
+      </div>
       </div>
     </header>
   );

@@ -1,4 +1,4 @@
-import React from "react";
+import React, { useState } from "react";
 import {
   Home,
   Users,
@@ -8,8 +8,10 @@ import {
   Sprout,
   LogOut,
   Settings,
+  ChevronLeft,
+  ChevronRight,
 } from "lucide-react";
-import { useAuth} from "../../../contexts/AuthContext";
+import { useAuth } from "../../../contexts/AuthContext";
 import { useNavigate, useLocation } from "react-router-dom";
 import Swal from "sweetalert2";
 
@@ -18,12 +20,12 @@ const Sidebar = () => {
   const navigate = useNavigate();
   const location = useLocation();
 
+  const [collapsed, setCollapsed] = useState(false);
+
   if (loading || !user) return null;
 
   const role = user?.role?.toLowerCase();
-  console.log("Sidebar ROLE:", role);
 
-  // Sidebar menus for different roles
   const sidebarMenus = {
     admin: [
       { id: "dashboard", label: "Dashboard", icon: Home },
@@ -77,27 +79,50 @@ const Sidebar = () => {
   };
 
   return (
-    <div className="w-64 bg-white shadow-lg border-r border-green-100 flex flex-col">
+    <div
+      className={`bg-white shadow-lg flex flex-col transition-all duration-300 ${
+        collapsed ? "w-20" : "w-64"
+      }`}
+    >
+      {/* Toggle Arrow */}
+      <div className="flex justify-end p-1">
+        <button
+          onClick={() => setCollapsed(!collapsed)}
+          className="p-1 rounded hover:bg-green-50 transition"
+          title={collapsed ? "Expand Sidebar" : "Collapse Sidebar"}
+        >
+          {collapsed ? (
+            <ChevronRight className="w-5 h-5 text-green-600" />
+          ) : (
+            <ChevronLeft className="w-5 h-5 text-green-600" />
+          )}
+        </button>
+      </div>
+
       {/* User Info */}
-      <div className="p-6 border-b border-green-100">
+      <div className="p-4">
         <div className="flex items-center gap-3 p-3 bg-green-50 rounded-lg">
-          <div className="w-10 h-10 bg-green-200 rounded-full flex items-center justify-center">
+          {/* Avatar always visible */}
+          <div className={`w-10 h-10 flex items-center justify-center ${
+        collapsed ? "rounded-none bg-none " : "rounded-full bg-green-200"
+      }`}>
             <span className="text-green-700 font-bold">
               {user?.name?.[0] || "U"}
             </span>
           </div>
-          <div>
-            <p className="font-semibold text-gray-900">
-              {user?.name}
-            </p>
-            <span
-              className={`px-2 py-1 rounded-full text-xs font-medium ${getRoleColor(
-                role
-              )}`}
-            >
-              {role}
-            </span>
-          </div>
+          {/* Name & role only visible when expanded */}
+          {!collapsed && (
+            <div>
+              <p className="font-semibold text-gray-900">{user?.name}</p>
+              <span
+                className={`px-2 py-1 rounded-full text-xs font-medium ${getRoleColor(
+                  role
+                )}`}
+              >
+                {role}
+              </span>
+            </div>
+          )}
         </div>
       </div>
 
@@ -122,7 +147,7 @@ const Sidebar = () => {
                   }`}
                 >
                   <Icon className="w-5 h-5" />
-                  <span className="font-medium">{item.label}</span>
+                  {!collapsed && <span className="font-medium">{item.label}</span>}
                 </button>
               </li>
             );
@@ -131,13 +156,13 @@ const Sidebar = () => {
       </nav>
 
       {/* Logout */}
-      <div className="p-4 border-t border-green-100">
+      <div className="p-4">
         <button
           onClick={handleLogout}
           className="w-full flex items-center gap-3 px-4 py-3 text-red-600 hover:bg-red-50 rounded-lg transition-colors duration-200"
         >
           <LogOut className="w-5 h-5" />
-          <span className="font-medium">Sign Out</span>
+          {!collapsed && <span className="font-medium">Sign Out</span>}
         </button>
       </div>
     </div>

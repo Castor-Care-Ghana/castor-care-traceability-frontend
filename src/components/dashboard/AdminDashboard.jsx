@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from "react";
 import {
   Users, Package, Layers, QrCode, User, TrendingUp,
-  Activity, Edit3, Mail, Phone, Calendar, X
+  Activity, Edit3, Mail, Phone, Calendar, X, Search
 } from "lucide-react";
 import Swal from "sweetalert2";
 import { getUserData, updateUserData } from "../../services/auth";
@@ -11,13 +11,16 @@ import {
   apiGetBatches,
   apiGetPackages,
   apiGetScans
-} from "../../services/traceability"; // 👈 create this service
+} from "../../services/traceability";
 import { useAuth } from "../../contexts/AuthContext";
+
 
 const AdminDashboard = () => {
   const { user, hasPermission, refreshUser } = useAuth();
   const [admin, setAdmin] = useState(null);
   const [showEditModal, setShowEditModal] = useState(false);
+  const [expandedTable, setExpandedTable] = useState(null);
+  const [filter, setFilter] = useState("");
   const [formData, setFormData] = useState({
     name: "",
     email: "",
@@ -34,6 +37,14 @@ const AdminDashboard = () => {
     { id: "scans", label: "Scans", value: 0, icon: QrCode, color: "bg-red-500" },
   ]);
 
+  const [lists, setLists] = useState({
+    users: [],
+    farmers: [],
+    batches: [],
+    packages: [],
+    scans: [],
+  });
+
   const fetchStats = async () => {
     try {
       const [usersRes, farmersRes, batchesRes, packagesRes, scansRes] = await Promise.all([
@@ -43,6 +54,17 @@ const AdminDashboard = () => {
         apiGetPackages(),
         apiGetScans(),
       ]);
+
+       const scans = scansRes?.data || [];
+
+      // Add status to packages based on scans
+      const packagesWithStatus = (packagesRes?.data || []).map(pkg => {
+        const soldScan = scans.find(scan => scan.package?.id === pkg.id);
+        return {
+          ...pkg,
+          status: soldScan ? "Sold" : "Available"
+        };
+      });
 
       setStats((prev) =>
         prev.map((stat) => {
@@ -62,6 +84,14 @@ const AdminDashboard = () => {
           }
         })
       );
+
+      setLists({
+        users: usersRes?.data || [],
+        farmers: farmersRes?.data || [],
+        batches: batchesRes?.data || [],
+        packages: packagesRes?.data || [],
+        scans: scansRes?.data || [],
+      });
     } catch (err) {
       console.error("Error fetching stats:", err);
     }
@@ -100,9 +130,8 @@ const AdminDashboard = () => {
       contact: formData.contact,
       avatar: formData.avatar,
     };
-    if (formData.password.trim()) {
-      cleanData.password = formData.password;
-    }
+    if (formData.password.trim()) cleanData.password = formData.password;
+
     try {
       const res = await updateUserData(cleanData);
       await refreshUser();
@@ -120,10 +149,62 @@ const AdminDashboard = () => {
 
   if (!admin) return <div className="p-6 text-center">Loading admin data...</div>;
 
+  // Safe selectedList
+  const selectedList = expandedTable && Array.isArray(lists[expandedTable])
+    ? lists[expandedTable]
+    : [];
+
+  // Flatten object for filtering
+  const flattenObject = (obj) => {
+    let str = "";
+    for (const key in obj) {
+      if (typeof obj[key] === "object" && obj[key] !== null) {
+        str += " " + flattenObject(obj[key]);
+      } else {
+        str += " " + obj[key];
+      }
+    }
+    return str;
+  };
+
+  // Map to selective fields with nested relations
+  const displayList = selectedList.map(item => {
+    if (expandedTable === "users") {
+      return { name: item.name, email: item.email, contact: item.contact, role: item.role, createdAt: item.createdAt};
+    }
+    if (expandedTable === "farmers") {
+      return { firstName: item.firstName, lastName: item.lastName, phone: item.phone, email: item.email };
+    }
+    if (expandedTable === "batches") {
+      return {
+        batchCode: item.batchCode,
+        farmerName: item.farmer ? item.farmer.firstName + " " + item.farmer.lastName : "—",
+        cropType: item.cropType,
+        quantity: item.quantity,
+      };
+    }
+    if (expandedTable === "packages") {
+      return {
+        packageCode: item.packageCode,
+        batchCode: item.batch ? item.batch.batchCode : "—",
+        QrCode: item.QrCode,
+        status: item.status,
+      };
+    }
+    if (expandedTable === "scans") {
+      return { packageCode: item.package ? item.package.packageCode : "—", scanBy: item.scanCode, scannedAt: item.scannedAt };
+    }
+    return item;
+  });
+
+  const filteredList = displayList.filter(item =>
+    flattenObject(item).toLowerCase().includes(filter.toLowerCase())
+  );
+
   return (
     <div className="p-6 space-y-6">
       {/* Top profile header */}
-      <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-4 bg-white p-6 rounded-xl shadow-sm border">
+      <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-4 bg-white p-6 rounded-xl shadow-sm border-gray-300">
         <div className="flex items-start gap-4">
           <div className="relative">
             <div className="w-16 h-16 rounded-full bg-green-100 flex items-center justify-center ring-4 ring-green-100">
@@ -157,7 +238,7 @@ const AdminDashboard = () => {
           if (stat.permission && !hasPermission(stat.permission)) return null;
           const Icon = stat.icon;
           return (
-            <div key={stat.id} className="bg-white rounded-xl shadow-sm border p-6 hover:shadow-md transition">
+            <div key={stat.id} className="bg-white rounded-xl shadow-sm border-gray-300 p-6 hover:shadow-md transition">
               <div className="flex items-center justify-between">
                 <div>
                   <p className="text-sm font-medium text-gray-600">{stat.label}</p>
@@ -172,10 +253,62 @@ const AdminDashboard = () => {
                 <span className="text-green-600 font-medium">+0%</span>
                 <span className="text-gray-500 ml-1">from last month</span>
               </div>
+              <button
+                onClick={() => {
+                  setExpandedTable(expandedTable === stat.id ? null : stat.id);
+                  setFilter("");
+                }}
+                className="mt-4 w-full bg-gray-100 hover:bg-gray-200 text-gray-700 text-sm font-medium py-2 rounded transition"
+              >
+                {expandedTable === stat.id ? "Hide Table" : `View ${stat.label} List`}
+              </button>
             </div>
           );
         })}
       </div>
+
+      {/* Expanded Table */}
+      {expandedTable && (
+        <div className="bg-white border border-gray-300 rounded-xl shadow-sm p-6 mt-6">
+          <div className="flex flex-col md:flex-row md:items-center md:justify-between mb-4 gap-3">
+            <h2 className="text-lg font-semibold text-gray-800 capitalize">{expandedTable} Table</h2>
+            <div className="relative w-full md:w-64">
+              <Search className="absolute left-3 top-2.5 text-gray-400 w-4 h-4" />
+              <input
+                type="text"
+                placeholder={`Filter ${expandedTable}...`}
+                value={filter}
+                onChange={(e) => setFilter(e.target.value)}
+                className="w-full pl-9 pr-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-1 focus:ring-green-500"
+              />
+            </div>
+          </div>
+          {filteredList.length > 0 ? (
+            <div className="overflow-x-auto">
+              <table className="min-w-full text-sm border border-gray-200">
+                <thead className="bg-gray-100">
+                  <tr>
+                    {Object.keys(filteredList[0]).map((key) => (
+                      <th key={key} className="text-left px-3 py-2 border-b border-gray-200 capitalize">{key}</th>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody>
+                  {filteredList.map((item, idx) => (
+                    <tr key={idx} className="hover:bg-gray-50">
+                      {Object.values(item).map((val, i) => (
+                        <td key={i} className="px-3 py-2 border-b border-gray-200">{val ? String(val) : "—"}</td>
+                      ))}
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          ) : (
+            <p className="text-gray-500">No data found for this filter.</p>
+          )}
+        </div>
+      )}
 
       {/* Edit Modal */}
       {showEditModal && (
@@ -207,10 +340,17 @@ const AdminDashboard = () => {
                   className="w-full border rounded px-3 py-2 mt-1"
                 />
               </div>
+              <div>
+                <label className="block text-sm font-medium">Avatar (optional)</label>
+                <input
+                  type="file"
+                  accept="avatar/*"
+                  onChange={(e) => setFormData({ ...formData, avatar: e.target.files[0] })}
+                  className="w-full border rounded px-3 py-2 mt-1"
+                />
+              </div>
               <div className="text-right">
-                <button type="submit" className="bg-green-600 text-white px-4 py-2 rounded hover:bg-green-700">
-                  Save Changes
-                </button>
+                <button type="submit" className="bg-green-600 text-white px-4 py-2 rounded hover:bg-green-700">Save Changes</button>
               </div>
             </form>
           </div>

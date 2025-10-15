@@ -20,7 +20,7 @@ export const AuthProvider = ({ children }) => {
         // ✅ Fetch user with token
         const res = await getUserData(token);
 
-        // handle both { user } or raw object
+        // Handle both { user } or raw object
         const userData = res?.data?.user || res?.data;
         setUser(userData);
 
@@ -28,7 +28,7 @@ export const AuthProvider = ({ children }) => {
       } catch (err) {
         console.error("❌ Auth init failed:", err);
 
-        // ✅ only clear if token is invalid
+        // ✅ Only clear if token is invalid
         if (err.response?.status === 401) {
           logout();
         }
@@ -38,6 +38,7 @@ export const AuthProvider = ({ children }) => {
     };
 
     initAuth();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   // ✅ login: save user + token
@@ -63,7 +64,7 @@ export const AuthProvider = ({ children }) => {
   );
 };
 
-// Custom hook
+// ✅ Custom hook
 export const useAuth = () => {
   const context = useContext(AuthContext);
   if (!context) {

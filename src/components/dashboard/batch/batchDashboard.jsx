@@ -4,6 +4,7 @@ import { useNavigate } from "react-router-dom";
 import Swal from "sweetalert2";
 import { apiGetBatches } from "../../../services/traceability";
 
+const BASE_URL = import.meta.env.VITE_BASE_URL; // ✅ moved outside
 
 const BatchDashboard = () => {
   const { user } = useAuth();
@@ -11,8 +12,6 @@ const BatchDashboard = () => {
   const [batches, setBatches] = useState([]);
   const [filter, setFilter] = useState("");
   const [view, setView] = useState(""); // "all" | "my"
-
-//   const BASE_URL = import.meta.env.VITE_BASE_URL;
 
   // ✅ Fetch all batches
   const fetchBatches = async () => {
@@ -43,19 +42,22 @@ const BatchDashboard = () => {
   // ✅ Delete batch
   const handleDelete = async (id) => {
     if (!window.confirm("Are you sure you want to delete this batch?")) return;
+
     try {
       const res = await fetch(`${BASE_URL}/batches/${id}`, {
         method: "DELETE",
         headers: {
-          Authorization: `Bearer ${user?.token}`,
+          Authorization: `Bearer ${localStorage.getItem("token")}`, // ✅ FIXED
         },
       });
+
       if (!res.ok) throw new Error("Failed to delete batch");
-      alert("✅ Batch deleted successfully");
+
+      Swal.fire("Deleted!", "Batch deleted successfully ✅", "success");
       fetchBatches();
     } catch (error) {
       console.error("❌ Delete failed:", error);
-      alert("Failed to delete batch.");
+      Swal.fire("Error", "Failed to delete batch ❌", "error");
     }
   };
 

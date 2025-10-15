@@ -14,15 +14,16 @@ import {
 import { useAuth } from "../../contexts/AuthContext";
 
 const UserDashboard = () => {
-  const { refreshUser } = useAuth();
+  const {hasPermission, refreshUser } = useAuth();
   const [user, setUser] = useState(null);
   const [showEditModal, setShowEditModal] = useState(false);
   const [expandedTable, setExpandedTable] = useState(null);
-  const [filter, setFilter] = useState(""); // 🔍 filter state
+  const [filter, setFilter] = useState("");
   const [formData, setFormData] = useState({
     name: "",
     email: "",
     contact: "",
+    avatar: "",
     password: "",
   });
 
@@ -107,6 +108,7 @@ const UserDashboard = () => {
       name: formData.name,
       email: formData.email,
       contact: formData.contact,
+      avatar: formData.avatar,
     };
     if (formData.password.trim()) cleanData.password = formData.password;
 
@@ -127,7 +129,10 @@ const UserDashboard = () => {
 
   if (!user) return <div className="p-6 text-center">Loading user data...</div>;
 
-  const selectedList = expandedTable ? lists[expandedTable] : [];
+  // ✅ Safe selectedList
+  const selectedList = expandedTable && Array.isArray(lists[expandedTable])
+    ? lists[expandedTable]
+    : [];
   // ✅ safer flatten for filtering nested objects
 const flattenObject = (obj) => {
   let str = "";
@@ -163,7 +168,7 @@ const filteredList = selectedList.filter((item) =>
             </div>
           </div>
           <div>
-            <h1 className="text-2xl font-bold text-gray-900">Welcome back, {user.firstName}!</h1>
+            <h1 className="text-2xl font-bold text-gray-900">Welcome back, {user.name}!</h1>
             <div className="flex flex-wrap gap-3 mt-2 text-sm text-gray-500">
               <span className="flex items-center gap-1"><Mail className="w-4 h-4" /> {user.email}</span>
               <span className="flex items-center gap-1"><Phone className="w-4 h-4" /> {user.contact || "N/A"}</span>
