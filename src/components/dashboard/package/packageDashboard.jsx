@@ -1,23 +1,59 @@
-import React, { useState, useEffect } from "react";
+// src/components/dashboard/package/PackageDashboard.jsx
+import React, { useEffect, useState } from "react";
 import { useAuth } from "../../../contexts/AuthContext";
-import { useNavigate } from "react-router-dom";
+import { useLocation, Link } from "react-router-dom";
+import Swal from "sweetalert2";
+import {
+  apiGetPackages,
+  apiUpdatePackage,
+  apiDeletePackage,
+} from "../../../services/traceability";
 
 const PackageDashboard = () => {
   const { user } = useAuth();
-  const navigate = useNavigate();
+  const location = useLocation();
+
   const [packages, setPackages] = useState([]);
   const [filter, setFilter] = useState("");
   const [view, setView] = useState("");
-  const BASE_URL = import.meta.env.VITE_BASE_URL;
+  const [selectedPackage, setSelectedPackage] = useState(null);
+  const [loading, setLoading] = useState(true);
 
+  const basePath = `/dashboard/${user?.role?.toLowerCase()}`;
+
+  // Helpers
+  const getId = (obj) =>
+    typeof obj === "string" ? obj : obj?.id ?? obj?._id ?? null;
+
+  const isAdmin = (user?.role || "").toLowerCase() === "admin";
+  const isOwnerOf = (pkg) => {
+    const uid = getId(user);
+    const pu = getId(pkg?.user);
+    return uid && pu && String(uid) === String(pu);
+  };
+
+  // Fetch packages
   const fetchPackages = async () => {
+    setLoading(true);
     try {
-      const res = await fetch(`${BASE_URL}/packages`);
-      if (!res.ok) throw new Error("Failed to fetch packages");
-      const data = await res.json();
-      setPackages(data);
-    } catch (error) {
-      console.error("❌ Error fetching packages:", error);
+      const res = await apiGetPackages();
+      const arr = Array.isArray(res?.data)
+        ? res.data
+        : Array.isArray(res)
+        ? res
+        : [];
+      setPackages(
+        arr.map((p) => ({
+          ...p,
+          id: p.id ?? p._id,
+          product: p.batch?.crop ?? "Unknown Crop",
+        }))
+      );
+    } catch (err) {
+      console.error("❌ Error fetching packages:", err);
+      setPackages([]);
+    } finally {
+      setLoading(false);
     }
   };
 
@@ -25,42 +61,220 @@ const PackageDashboard = () => {
     fetchPackages();
   }, []);
 
+  // Filter logic
   const filteredPackages = packages.filter(
-    (p) =>
-      p.packageCode?.toLowerCase().includes(filter.toLowerCase()) ||
-      p.batchCode?.toLowerCase().includes(filter.toLowerCase())
+    (pkg) =>
+      pkg.batch?.crop?.toLowerCase().includes(filter.toLowerCase()) ||
+      pkg.packageCode?.toLowerCase().includes(filter.toLowerCase())
   );
 
-  const userPackages = filteredPackages.filter((p) => p.user?._id === user?.id);
+  const userPackages = filteredPackages.filter((p) => {
+    const uid = getId(user);
+    const pu = getId(p.user);
+    return uid && pu && String(uid) === String(pu);
+  });
 
-  const handleDelete = async (id) => {
-    if (!window.confirm("Are you sure you want to delete this package?")) return;
+  // Stats
+  const totalPackages = packages.length;
+  const totalWeight = packages.reduce((sum, p) => sum + (p.weight || 0), 0);
+  const uniqueProducts = [
+    ...new Set(packages.map((p) => p.product || "")),
+  ].length;
+  const myPackages = userPackages.length;
+
+  // Export CSV
+  const escapeCell = (val) => {
+    if (val === null || val === undefined) return '""';
+    return `"${String(val).replace(/"/g, '""')}"`;
+  };
+
+  const exportToCSV = (data = [], filename = "packages.csv") => {
+    if (!data.length) {
+      Swal.fire("No data", "There are no packages to download.", "info");
+      return;
+    }
+    const headers = [
+      "Product",
+      "Package Code",
+      "Weight",
+      "Destination",
+      "Receiver",
+    ];
+    const rows = data.map((p) => [
+      p.batchCode || p.batch?.crop || "",
+      p.packageCode || "",
+      p.weight ?? "",
+      p.destination || "",
+      p.user?.name || "Unknown",
+    ]);
+    const csvLines = [
+      headers.map(escapeCell).join(","),
+      ...rows.map((r) => r.map(escapeCell).join(",")),
+    ];
+    const csvContent = "\uFEFF" + csvLines.join("\r\n");
+    const blob = new Blob([csvContent], {
+      type: "text/csv;charset=utf-8;",
+    });
+    const link = document.createElement("a");
+    link.href = URL.createObjectURL(blob);
+    link.download = filename;
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+  };
+
+  // Edit
+  const handleEdit = async (pkg) => {
+    const pkgId = pkg?.id || pkg?._id;
+    if (!pkgId) {
+      Swal.fire("Error", "Package ID not found.", "error");
+      return;
+    }
+    if (!isAdmin && !isOwnerOf(pkg)) {
+      Swal.fire(
+        "Unauthorized",
+        "You can only edit your own packages.",
+        "warning"
+      );
+      return;
+    }
+
+    const safe = (v) =>
+      v === undefined || v === null
+        ? ""
+        : String(v).replace(/"/g, "&quot;");
+
+    const { value: formValues } = await Swal.fire({
+      title: "Edit Package",
+      width: 600,
+      html: `
+        <div class="flex flex-col gap-3 text-left">
+          <label class="text-sm text-gray-600">Product</label>
+          <input id="swal-product" type="text" value="${safe(
+            pkg.batch?.crop
+          )}" disabled
+            class="w-full border border-gray-300 rounded-lg px-3 py-2 bg-gray-100 text-gray-500" />
+          
+          <label class="text-sm text-gray-600">Weight (kg)</label>
+          <input id="swal-weight" type="number" value="${safe(pkg.weight)}"
+            class="w-full border border-gray-300 rounded-lg px-3 py-2" />
+
+          <label class="text-sm text-gray-600">Package Code</label>
+          <input type="text" value="${safe(
+            pkg.packageCode
+          )}" disabled
+            class="w-full border border-gray-300 rounded-lg px-3 py-2 bg-gray-100 text-gray-500" />
+
+            <label class="text-sm text-gray-600">Batch Code</label>
+          <input type="text" value="${safe(
+            pkg.batch?.batchCode
+          )}" disabled
+            class="w-full border border-gray-300 rounded-lg px-3 py-2 bg-gray-100 text-gray-500" />
+        </div>
+      `,
+      focusConfirm: false,
+      showCancelButton: true,
+      confirmButtonText: "Save Changes",
+      confirmButtonColor: "#166534",
+      preConfirm: () => {
+        return {
+          weight: Number(document.getElementById("swal-weight").value),
+        };
+      },
+    });
+
+    if (!formValues) return;
+
     try {
-      const res = await fetch(`${BASE_URL}/packages/${id}`, {
-        method: "DELETE",
-        headers: { Authorization: `Bearer ${user?.token}` },
-      });
-      if (!res.ok) throw new Error("Failed to delete package");
-      alert("✅ Package deleted");
+      await apiUpdatePackage(pkgId, formValues);
+      Swal.fire("✅ Updated!", "Package updated successfully.", "success");
       fetchPackages();
-    } catch (error) {
-      alert("Delete failed");
+      setSelectedPackage(null);
+    } catch (err) {
+      console.error("❌ Edit error:", err);
+      Swal.fire(
+        "Error",
+        err?.response?.data?.message || err.message,
+        "error"
+      );
     }
   };
 
-  const handleEdit = (id) => navigate(`/dashboard/packages/edit/${id}`);
+  // Delete
+  const handleDelete = async (id, pkgUser) => {
+    const isOwner = String(getId(pkgUser)) === String(getId(user));
+    if (!isAdmin && !isOwner) {
+      Swal.fire(
+        "Unauthorized",
+        "You can only delete your own packages.",
+        "warning"
+      );
+      return;
+    }
+
+    const confirm = await Swal.fire({
+      title: "Are you sure?",
+      text: "This will permanently delete the package.",
+      icon: "warning",
+      showCancelButton: true,
+      confirmButtonColor: "#d33",
+      cancelButtonColor: "#3085d6",
+      confirmButtonText: "Yes, delete",
+    });
+    if (!confirm.isConfirmed) return;
+
+    try {
+      await apiDeletePackage(id);
+      Swal.fire("Deleted!", "Package has been deleted.", "success");
+      setSelectedPackage(null);
+      fetchPackages();
+    } catch (error) {
+      console.error("❌ Delete error:", error);
+      Swal.fire("Error", "Failed to delete package.", "error");
+    }
+  };
+
+  const handleView = (pkg) => setSelectedPackage(pkg);
+  const closeModal = () => setSelectedPackage(null);
+
+  if (loading) return <p className="p-6 text-center">Loading packages...</p>;
 
   return (
-    <div className="p-6 max-w-5xl mx-auto">
-      <h1 className="text-2xl font-bold mb-6 text-green-700">📦 Package Dashboard</h1>
+    <div className="p-6 max-w-6xl mx-auto">
+      <h1 className="text-2xl font-bold mb-6 text-green-700">
+        📦 Package Dashboard
+      </h1>
 
+      {/* Stats Inline */}
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
+        <div className="bg-green-100 p-2 rounded-lg shadow text-center">
+          <p className="text-xl font-bold text-green-700">{totalPackages}</p>
+          <p className="text-sm text-gray-600">Total Packages</p>
+        </div>
+        <div className="bg-blue-100 p-2 rounded-lg shadow text-center">
+          <p className="text-xl font-bold text-blue-700">{uniqueProducts}</p>
+          <p className="text-sm text-gray-600">Unique Products</p>
+        </div>
+        <div className="bg-yellow-100 p-2 rounded-lg shadow text-center">
+          <p className="text-xl font-bold text-yellow-700">
+            {totalWeight} kg
+          </p>
+          <p className="text-sm text-gray-600">Total Weight</p>
+        </div>
+        <div className="bg-purple-100 p-2 rounded-lg shadow text-center">
+          <p className="text-xl font-bold text-purple-700">{myPackages}</p>
+          <p className="text-sm text-gray-600">My Packages</p>
+        </div>
+      </div>
+
+      {/* Action Buttons */}
       <div className="flex gap-4 mb-8">
-        <button
-          onClick={() => navigate("/dashboard/packages/create")}
+        <Link
+          to={`${basePath}/packages/create`}
           className="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 shadow"
         >
           ➕ Create Package
-        </button>
+        </Link>
         <button
           onClick={() => setView("all")}
           className={`px-4 py-2 rounded-lg border border-gray-400 ${
@@ -81,65 +295,119 @@ const PackageDashboard = () => {
         >
           👤 My Packages
         </button>
+        <button
+          onClick={() => setView("stats")}
+          className={`px-4 py-2 rounded-lg border border-gray-400 ${
+            view === "stats"
+              ? "bg-blue-600 text-white"
+              : "bg-blue-100 text-blue-800 hover:bg-blue-200"
+          }`}
+        >
+          📊 Stats
+        </button>
       </div>
 
+      {/* Filter + CSV */}
       {(view === "all" || view === "my") && (
-        <input
-          type="text"
-          placeholder="Filter by package or batch code..."
-          value={filter}
-          onChange={(e) => setFilter(e.target.value)}
-          className="w-full mb-4 p-2 border border-gray-400 rounded-lg focus:ring-2 focus:ring-green-500"
-        />
+        <div className="flex items-center justify-between mb-4">
+          <h2 className="text-lg font-semibold text-gray-700">
+            {view === "all" ? "All Packages" : "My Packages"}
+          </h2>
+          <div className="flex items-center gap-3">
+            <input
+              type="text"
+              placeholder="Filter packages..."
+              value={filter}
+              onChange={(e) => setFilter(e.target.value)}
+              className="w-40 pl-3 pr-3 py-2 border border-gray-300 rounded-md shadow-sm focus:ring-2 focus:ring-green-500"
+            />
+            <button
+              onClick={() =>
+                exportToCSV(
+                  view === "all" ? filteredPackages : userPackages,
+                  `${view}_packages.csv`
+                )
+              }
+              className="px-3 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 shadow text-sm"
+            >
+              ⬇️ CSV
+            </button>
+          </div>
+        </div>
       )}
 
+      {/* Package List */}
       <div className="border border-gray-300 rounded-lg p-4 bg-white">
         {view === "" && (
-          <p className="text-gray-600 text-center">Select an action to continue 📦</p>
+          <p className="text-gray-600 text-center">
+            Select an action to continue 📦
+          </p>
         )}
+
         {view === "all" &&
           (filteredPackages.length ? (
             <ul className="space-y-2">
               {filteredPackages.map((p) => (
                 <li
-                  key={p._id}
-                  className="p-3 border border-gray-300 rounded-lg flex justify-between hover:bg-green-50"
+                  key={p.id}
+                  onClick={() => handleView(p)}
+                  className="p-3 border border-gray-300 rounded-lg flex items-center gap-3 hover:bg-green-50 cursor-pointer"
                 >
-                  <div>
-                    <p className="font-medium text-green-700">{p.packageCode}</p>
-                    <p className="text-sm text-gray-500">{p.batchCode}</p>
+                  <div className="w-10 h-10 rounded-full bg-green-200 text-green-800 flex items-center justify-center font-bold text-lg border border-green-400">
+                    {p.product?.charAt(0)?.toUpperCase() || "?"}
                   </div>
-                  <p className="text-sm text-gray-600">{p.weight} kg</p>
+                  <div>
+                    <p className="font-medium text-green-700">{p.batch?.crop || "Unknown"}</p>
+                    <p className="text-sm text-gray-500">
+                      Code: {p.packageCode}
+                    </p>
+                    <p className="text-sm text-gray-600">
+                      Weight: {p.weight} kg
+                    </p>
+                  </div>
                 </li>
               ))}
             </ul>
           ) : (
-            <p className="text-gray-500 text-center">No packages found 📦</p>
+            <p className="text-gray-500 text-center">No packages found 📭</p>
           ))}
+
         {view === "my" &&
           (userPackages.length ? (
             <ul className="space-y-2">
               {userPackages.map((p) => (
                 <li
-                  key={p._id}
-                  className="p-3 border border-gray-300 rounded-lg flex justify-between items-center hover:bg-green-50"
+                  key={p.id}
+                  className="p-3 border border-gray-300 rounded-lg flex items-center gap-3 hover:bg-green-50"
                 >
-                  <div>
-                    <p className="font-medium text-green-700">{p.packageCode}</p>
-                    <p className="text-sm text-gray-500">{p.batchCode}</p>
+                  <div
+                    className="cursor-pointer flex-1"
+                    onClick={() => handleView(p)}
+                  >
+                    <p className="font-medium text-green-700">
+                      {p.batch?.crop}
+                    </p>
+                    <p className="text-sm text-gray-500">
+                      Code: {p.packageCode}
+                    </p>
+                    <p className="text-sm text-gray-600">
+                      Weight: {p.weight} kg
+                    </p>
                   </div>
-                  <div className="flex gap-3">
+                  <div className="flex gap-3 ml-4">
                     <button
-                      onClick={() => handleEdit(p._id)}
-                      className="px-3 py-1 bg-green-500 text-white rounded hover:bg-green-600"
+                      onClick={() => handleEdit(p)}
+                      className="text-green-600 hover:text-green-800 text-lg"
+                      title="Edit Package"
                     >
-                      ✏️ Edit
+                      ✏️
                     </button>
                     <button
-                      onClick={() => handleDelete(p._id)}
-                      className="px-3 py-1 bg-red-500 text-white rounded hover:bg-red-600"
+                      onClick={() => handleDelete(p.id, p.user)}
+                      className="text-red-500 hover:text-red-700 text-lg"
+                      title="Delete Package"
                     >
-                      🗑️ Delete
+                      🗑️
                     </button>
                   </div>
                 </li>
@@ -150,7 +418,69 @@ const PackageDashboard = () => {
               You haven’t created any packages yet 📦
             </p>
           ))}
+
+        {view === "stats" && (
+          <div className="text-center text-gray-700">
+            <p>Total Packages: {totalPackages}</p>
+            <p>Unique Products: {uniqueProducts}</p>
+            <p>Total Weight: {totalWeight} kg</p>
+            <p>My Packages: {myPackages}</p>
+          </div>
+        )}
       </div>
+
+      {/* Selected Package Modal */}
+      {selectedPackage && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex justify-center items-center z-50">
+          <div className="bg-white p-6 rounded-lg shadow-xl max-w-md w-full relative">
+            <button
+              onClick={closeModal}
+              className="absolute top-2 right-3 text-gray-600 hover:text-gray-800 text-xl"
+            >
+              ✖
+            </button>
+            <h2 className="text-xl font-semibold text-green-700 mb-4">
+              Package Details
+            </h2>
+            <div className="space-y-2 text-gray-700">
+              <p>
+                <strong>Package Code:</strong> {selectedPackage.packageCode}
+              </p>
+              <p>
+                <strong>Crop:</strong> {selectedPackage.batch?.crop || "N/A"}
+              </p>
+              <p>
+                <strong>Batch:</strong> {selectedPackage.batch?.batchCode || "N/A"}
+              </p>
+              <p>
+                <strong>Weight:</strong> {selectedPackage.weight} kg
+              </p>
+              <p>
+                <strong>Packed By:</strong>{" "}
+                {selectedPackage.user?.name || "Unknown"}
+              </p>
+            </div>
+            {(isAdmin || isOwnerOf(selectedPackage)) && (
+              <div className="flex justify-end gap-3 mt-5">
+                <button
+                  onClick={() => handleEdit(selectedPackage)}
+                  className="px-3 py-2 bg-green-600 text-white rounded hover:bg-green-700"
+                >
+                  ✏️ Edit
+                </button>
+                <button
+                  onClick={() =>
+                    handleDelete(selectedPackage.id, selectedPackage.user)
+                  }
+                  className="px-3 py-2 bg-red-500 text-white rounded hover:bg-red-600"
+                >
+                  🗑️ Delete
+                </button>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
     </div>
   );
 };

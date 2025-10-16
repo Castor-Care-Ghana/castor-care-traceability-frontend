@@ -389,7 +389,7 @@ const exportToCSV = (data, filename = "farmers.csv") => {
 
     <div className="flex items-center gap-3">
       {/* Search box */}
-      <div className="relative w-64">
+      <div className="relative w-40">
         <span className="absolute inset-y-0 left-2 flex items-center text-gray-400">
           🔍
         </span>

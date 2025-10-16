@@ -35,11 +35,13 @@ import ListFarmers from "./components/dashboard/farmer/ListFarmer";
 import BatchDashboard from "./components/dashboard/batch/batchDashboard";
 import CreateBatch from "./components/dashboard/batch/CreateBatch";
 import ListBatches from "./components/dashboard/batch/ListBatch";
+import BatchStats from "./components/dashboard/batch/BatchStats";
 
 // PACKAGES
 import PackageDashboard from "./components/dashboard/package/packageDashboard";
 import CreatePackage from "./components/dashboard/package/CreatePackage";
 import ListPackages from "./components/dashboard/package/ListPackage";
+import PackageStats from "./components/dashboard/package/PackageStats";
 
 // SCANS
 import ScanDashboard from "./components/dashboard/scan/scanDashboard";
@@ -95,10 +97,12 @@ const router = createBrowserRouter([
           { path: "batches", element: <BatchDashboard /> },
           { path: "batches/create", element: <CreateBatch /> },
           { path: "batches/list", element: <ListBatches /> },
+          {path: "batches/stats", element: <BatchStats/>},
 
           { path: "packages", element: <PackageDashboard /> },
           { path: "packages/create", element: <CreatePackage /> },
           { path: "packages/list", element: <ListPackages /> },
+          { path: "packages/stats", element: <PackageStats /> },
 
           { path: "scans", element: <ScanDashboard /> },
           { path: "scans/perform", element: <PerformScan /> },
@@ -119,10 +123,12 @@ const router = createBrowserRouter([
           { path: "batches", element: <BatchDashboard /> },
           { path: "batches/create", element: <CreateBatch /> },
           { path: "batches/list", element: <ListBatches /> },
-
+          { path: "batches/stats", element: <BatchStats /> },
+          
           { path: "packages", element: <PackageDashboard /> },
           { path: "packages/create", element: <CreatePackage /> },
           { path: "packages/list", element: <ListPackages /> },
+          { path: "packages/stats", element: <PackageStats /> },
 
           { path: "scans", element: <ScanDashboard /> },
           { path: "scans/perform", element: <PerformScan /> },
