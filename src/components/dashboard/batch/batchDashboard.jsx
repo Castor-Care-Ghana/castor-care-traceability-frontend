@@ -19,16 +19,17 @@ const BatchDashboard = () => {
   const [filter, setFilter] = useState("");
   const [view, setView] = useState("");
   const [selectedBatch, setSelectedBatch] = useState(null);
+  const [showModal, setShowModal] = useState(false);
   const [loading, setLoading] = useState(true);
 
   const newBatch = location.state?.newBatch;
   useEffect(() => {
     if (location.state?.newBatch) {
-      setSelectedBatch(newBatch);
+      setSelectedBatch(location.state.newBatch);
       setShowModal(true);
     }
 
-  }, [location.state?.newBatch]);
+  }, [location.state]);
 
   const basePath = `/dashboard/${user?.role?.toLowerCase()}`;
 
@@ -103,8 +104,6 @@ const BatchDashboard = () => {
     fetchBatches();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
-
-  // combined filtering: text + farmer dropdown
   // filter logic (includes farmer name)
 const filteredBatches = batches.filter((batch) => {
   const farmerName = batch.farmer 
@@ -180,7 +179,6 @@ const filteredBatches = batches.filter((batch) => {
   const currentFarmerId = getFarmerIdFromBatch(batch) || "";
   const currentFarmerName = getFarmerNameFromBatch(batch);
 
-  // escape unsafe strings
   const safe = (v) =>
     v === undefined || v === null ? "" : String(v).replace(/"/g, "&quot;");
 
@@ -189,7 +187,6 @@ const filteredBatches = batches.filter((batch) => {
     width: 600,
     html: `
       <div class="flex flex-col gap-3 text-left">
-        
         <label class="text-sm text-gray-600">Farmer</label>
         <input id="swal-farmer-input" type="text"
           placeholder="Search farmer..."
@@ -235,6 +232,7 @@ const filteredBatches = batches.filter((batch) => {
     didOpen: () => {
       const input = document.getElementById("swal-farmer-input");
       const suggestionBox = document.getElementById("swal-farmer-suggestions");
+      const preview = document.getElementById("swal-farmer-preview");
       let selectedFarmerId = currentFarmerId;
 
       input.addEventListener("input", (e) => {
@@ -269,7 +267,6 @@ const filteredBatches = batches.filter((batch) => {
         });
       });
 
-      // Save chosen farmer id to Swal's container
       Swal.getPopup().dataset.farmerId = selectedFarmerId;
     },
     preConfirm: () => {
@@ -279,10 +276,27 @@ const filteredBatches = batches.filter((batch) => {
       const collectionLocationVal =
         document.getElementById("swal-location").value.trim();
 
+      if (!farmerSel) {
+        Swal.showValidationMessage("Please select a valid farmer.");
+        return false;
+      }
+      if (!cropVal) {
+        Swal.showValidationMessage("Crop is required.");
+        return false;
+      }
+      if (qtyRaw === "" || isNaN(qtyRaw) || Number(qtyRaw) <= 0) {
+        Swal.showValidationMessage("Quantity must be a positive number.");
+        return false;
+      }
+      if (!collectionLocationVal) {
+        Swal.showValidationMessage("Collection location is required.");
+        return false;
+      }
+
       return {
-        ...(farmerSel ? { farmer: farmerSel } : {}),
+        farmer: farmerSel,
         crop: cropVal,
-        quantity: qtyRaw === "" ? undefined : Number(qtyRaw),
+        quantity: Number(qtyRaw),
         collectionLocation: collectionLocationVal,
       };
     },
@@ -291,7 +305,8 @@ const filteredBatches = batches.filter((batch) => {
   if (!formValues) return;
 
   try {
-    await apiUpdateBatch(batchId, formValues);
+    const payload = { ...formValues };
+    await apiUpdateBatch(batchId, payload);
     Swal.fire("✅ Updated!", "Batch updated successfully.", "success");
     fetchBatches();
     setSelectedBatch(null);
@@ -299,16 +314,16 @@ const filteredBatches = batches.filter((batch) => {
     console.error("❌ Edit error:", err);
     Swal.fire(
       "Error",
-      err?.response?.data?.message || err?.message || "Failed to update batch.",
+      err.response?.data?.message || "Failed to update batch.",
       "error"
     );
   }
 };
-
-
   const handleDelete = async (id, batchUserId) => {
     const isOwner =
-      String(getId(batchUserId)) === String(getId(user));
+      batchUserId === user?.id ||
+      batchUserId?.id === user?.id ||
+      batchUserId?._id === user?.id;
 
     if (!isAdmin && !isOwner) {
       Swal.fire("Unauthorized", "You can only delete your own batches.", "warning");
@@ -334,12 +349,19 @@ const filteredBatches = batches.filter((batch) => {
       fetchBatches();
     } catch (error) {
       console.error("❌ Delete error:", error);
-      Swal.fire("Error", "Failed to delete batch.", "error");
+      Swal.fire("Error", error.response?.data?.message || "Failed to delete batch.", "error");
     }
   };
 
   const handleViewBatch = (batch) => setSelectedBatch(batch);
   const closeModal = () => setSelectedBatch(null);
+
+  const canEditOrDelete =
+    selectedBatch &&
+    (user?.role?.toLowerCase() === "admin" ||
+      selectedBatch.user === user?.id ||
+      selectedBatch.user?.id === user?.id ||
+      selectedBatch.user?._id === user?.id);
 
   if (loading) return <p className="p-6 text-center">Loading batches...</p>;
 
@@ -384,6 +406,70 @@ const filteredBatches = batches.filter((batch) => {
           👤 My Batches
         </button>
       </div>
+
+        {/* ✅ Inline Farmer Card (after create) */}
+{newBatch && view === "" && (
+  <div className="inline-block bg-white p-4 rounded-lg shadow border border-green-200 w-100 auto m-2 align-top">
+    <h2 className="text-xl font-bold text-green-700 mb-4">
+      🎉 New Batch Added
+    </h2>
+    <div className="flex flex-col items-center">
+      {/* Batch Info */}
+      <div className="text-left space-y-1 flex-1">
+        <h2 className="text-base-center text-xl font-bold text-green-700 mb-2">
+         {newBatch.batchCode || "N/A"}
+        </h2>
+        <p className="text-s text-gray-600">
+        Farmer: {getFarmerNameFromBatch(newBatch) || "N/A"}
+      </p>
+
+        <p className="text-s text-gray-600">
+          Crop: {newBatch.crop || "N/A"}
+        </p>
+        <p className="text-s text-gray-600">
+          Quantity: {newBatch.quantity || "N/A"} kg
+        </p>
+        <p className="text-s text-gray-600">
+          Collection Location: {newBatch.collectionLocation || "N/A"}
+        </p>
+        <p className="text-s text-gray-600">
+        GPS:{" "}
+        {newBatch.gpsAddress ||
+          [newBatch.latitude, newBatch.longitude, newBatch.fullAddress]
+            .filter(Boolean)
+            .join(", ") ||
+          "N/A"}
+      </p>
+
+        <p className="text-s text-gray-600">
+          Date:{" "}
+          {newBatch.createdAt
+            ? new Date(newBatch.createdAt).toLocaleDateString()
+            : "N/A"}
+        </p>
+      </div>
+
+      {/* Edit/Delete Buttons */}
+      <div className="flex justify-center gap-4 mt-3">
+        <button
+          onClick={() => handleEdit(newBatch)}
+          className="text-green-600 hover:text-green-800 text-lg"
+          title="Edit Batch"
+        >
+          ✏️
+        </button>
+        <button
+          onClick={() => handleDelete(newBatch.id || newBatch._id, newBatch.user)}
+          className="text-red-500 hover:text-red-700 text-lg"
+          title="Delete Batch"
+        >
+          🗑️
+        </button>
+      </div>
+    </div>
+  </div>
+)}
+
 
       {/* Filter + CSV */}
       {(view === "all" || view === "my") && (

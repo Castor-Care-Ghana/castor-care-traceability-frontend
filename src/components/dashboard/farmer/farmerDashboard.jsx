@@ -17,6 +17,7 @@ const FarmerDashboard = () => {
   const [view, setView] = useState("");
   const [selectedFarmer, setSelectedFarmer] = useState(null);
   const [showModal, setShowModal] = useState(false);
+  const [loading, setLoading] = useState(true);
 
   const newFarmer = location.state?.newFarmer;
   
@@ -53,6 +54,8 @@ const FarmerDashboard = () => {
       console.error("❌ Error fetching farmers:", error);
       Swal.fire("Error", "Failed to fetch farmers", "error");
       setFarmers([]);
+    } finally {
+      setLoading(false);
     }
   };
 
@@ -226,6 +229,7 @@ const exportToCSV = (data, filename = "farmers.csv") => {
       await apiUpdateFarmer(farmerId, payload);
       Swal.fire("✅ Updated!", "Farmer information updated successfully.", "success");
       fetchFarmers();
+      setSelectedFarmer(null);
     } catch (error) {
       console.error("❌ Edit error:", error);
       Swal.fire(
@@ -284,6 +288,8 @@ const exportToCSV = (data, filename = "farmers.csv") => {
       selectedFarmer.user === user?.id ||
       selectedFarmer.user?.id === user?.id ||
       selectedFarmer.user?._id === user?.id);
+
+      if (loading) return <p className="p-6 text-center">Loading farmers...</p>;
 
   return (
     <div className="p-6 max-w-5xl mx-auto">

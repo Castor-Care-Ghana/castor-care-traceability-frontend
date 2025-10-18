@@ -3,8 +3,13 @@ import React, { useState, useEffect, useRef } from "react";
 import api from "../../../api";
 import Swal from "sweetalert2";
 import { useNavigate } from "react-router-dom";
+import { useAuth } from "../../../contexts/AuthContext";
 
 const CreateBatch = () => {
+  const navigate = useNavigate();
+  const { user } = useAuth();
+  const newBatch = navigate.location?.state?.newBatch || null;
+  
   const [form, setForm] = useState({
     farmer: "",
     crop: "",
@@ -279,49 +284,61 @@ const CreateBatch = () => {
       const res = await api.post("/batches", payload);
       const { batch } = res.data || {};
 
+      // build redirect path and include created batch in state
+      const role = user?.role || localStorage.getItem("role");
+      const redirectPath = `/dashboard/${role === "admin" ? "admin" : "user"}/batches`;
+
       // show SweetAlert with batchCode and generated GPS (from backend), allow print
-      // inside handleSubmit after Swal.fire
-Swal.fire({
-  title: "✅ Batch Created!",
-  html: `
-    <p><strong>Batch Code:</strong> ${batch?.batchCode || "N/A"}</p>
-    <p><strong>GPS Address (generated):</strong> ${batch?.gpsAddress || "N/A"}</p>
-  `,
-  icon: "success",
-  showCancelButton: true,
-  confirmButtonText: "Print Receipt",
-  cancelButtonText: "Close",
-}).then((result) => {
-  if (result.isConfirmed) {
-    const printWindow = window.open("", "_blank");
-    printWindow.document.write(`
-      <html><head><title>Batch Receipt</title>
-      <style>body{font-family: Arial; padding:20px} h2{color:green}</style>
-      </head><body>
-      <h2>Batch Receipt</h2>
-      <div><strong>Batch Code:</strong> ${batch?.batchCode || ""}</div>
-      <div><strong>Farmer:</strong> ${farmerQuery}</div>
-      <div><strong>Crop:</strong> ${form.crop}</div>
-      <div><strong>Quantity:</strong> ${form.quantity}</div>
-      <div><strong>Collection Location:</strong> ${form.collectionLocation}</div>
-      <div><strong>Latitude:</strong> ${latitude ?? "N/A"}</div>
-      <div><strong>Longitude:</strong> ${longitude ?? "N/A"}</div>
-      <div><strong>Full Address (client):</strong> ${gpsAddress || "N/A"}</div>
-      <div><strong>GPS Address (server):</strong> ${batch?.gpsAddress || "N/A"}</div>
-      <hr/><p>Thank you for using CastorCare Traceability ✅</p>
-      <script>window.print();</script>
-      </body></html>
-    `);
-    printWindow.document.close();
-    // ✅ redirect after print
-    printWindow.onafterprint = () => {
-      window.location.href = "/dashboard";
-    };
-  } else {
-    // ✅ redirect on cancel
-    window.location.href = `/dashboard/${localStorage.getItem("role") === "admin" ? "admin" : "user"}/batches`;
-  }
-});
+      Swal.fire({
+        title: "✅ Batch Created!",
+        html: `
+          <p><strong>Batch Code:</strong> ${batch?.batchCode || "N/A"}</p>
+          <p><strong>GPS Address (generated):</strong> ${batch?.gpsAddress || "N/A"}</p>
+        `,
+        icon: "success",
+        showCancelButton: true,
+        confirmButtonText: "Print Receipt",
+        cancelButtonText: "Close",
+      }).then((result) => {
+        if (result.isConfirmed) {
+          const printWindow = window.open("", "_blank");
+          printWindow.document.write(`
+            <html><head><title>Batch Receipt</title>
+            <style>body{font-family: Arial; padding:20px} h2{color:green}</style>
+            </head><body>
+            <h2>Batch Receipt</h2>
+            <div><strong>Batch Code:</strong> ${batch?.batchCode || ""}</div>
+            <div><strong>Farmer:</strong> ${farmerQuery}</div>
+            <div><strong>Crop:</strong> ${form.crop}</div>
+            <div><strong>Quantity:</strong> ${form.quantity}</div>
+            <div><strong>Collection Location:</strong> ${form.collectionLocation}</div>
+            <div><strong>Latitude:</strong> ${latitude ?? "N/A"}</div>
+            <div><strong>Longitude:</strong> ${longitude ?? "N/A"}</div>
+            <div><strong>Full Address (client):</strong> ${gpsAddress || "N/A"}</div>
+            <div><strong>GPS Address (server):</strong> ${batch?.gpsAddress || "N/A"}</div>
+            <hr/><p>Thank you for using CastorCare Traceability ✅</p>
+            <script>window.print();</script>
+            </body></html>
+          `);
+          printWindow.document.close();
+
+          // redirect main app to batches with state after print (and attempt to close print window)
+          printWindow.onafterprint = () => {
+            try {
+              printWindow.close();
+            } catch (e) {}
+            navigate(redirectPath, { state: { newBatch: batch } });
+          };
+
+          // As a safety fallback (some browsers may not fire onafterprint), also redirect after a short delay
+          setTimeout(() => {
+            navigate(redirectPath, { state: { newBatch: batch } });
+          }, 1000);
+        } else {
+          // redirect on cancel, include created batch in state
+          navigate(redirectPath, { state: { newBatch: batch } });
+        }
+      });
 
       // Reset form & UI
       setForm({ farmer: "", crop: "", quantity: "", collectionLocation: "" });
