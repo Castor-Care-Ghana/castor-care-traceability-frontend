@@ -19,6 +19,15 @@ const PackageDashboard = () => {
   const [selectedPackage, setSelectedPackage] = useState(null);
   const [loading, setLoading] = useState(true);
 
+  const newPackage = location.state?.newPackage;
+
+  useEffect(() => {
+    // if a newPackage was passed through location state, open modal for it
+    if (location.state?.newPackage) {
+      setSelectedPackage(location.state.newPackage);
+    }
+  }, [location.state]);
+
   const basePath = `/dashboard/${user?.role?.toLowerCase()}`;
 
   // Helpers
@@ -37,16 +46,19 @@ const PackageDashboard = () => {
     setLoading(true);
     try {
       const res = await apiGetPackages();
-      const arr = Array.isArray(res?.data)
-        ? res.data
-        : Array.isArray(res)
-        ? res
-        : [];
+      // support various response shapes: res.data, res.data.data, or array returned directly
+      const arr =
+        Array.isArray(res?.data?.data) ? res.data.data :
+        Array.isArray(res?.data) ? res.data :
+        Array.isArray(res) ? res :
+        Array.isArray(res?.data?.packages) ? res.data.packages :
+        [];
+
       setPackages(
         arr.map((p) => ({
           ...p,
           id: p.id ?? p._id,
-          product: p.batch?.crop ?? "Unknown Crop",
+          product: p.batch?.crop ?? p.batch?.cropType ?? "Unknown Crop",
         }))
       );
     } catch (err) {
@@ -61,11 +73,13 @@ const PackageDashboard = () => {
     fetchPackages();
   }, []);
 
-  // Filter logic
+  // Filter logic (case-insensitive)
   const filteredPackages = packages.filter(
     (pkg) =>
-      pkg.batch?.crop?.toLowerCase().includes(filter.toLowerCase()) ||
-      pkg.packageCode?.toLowerCase().includes(filter.toLowerCase())
+      (pkg.batch?.crop || pkg.batch?.cropType || "")
+        .toLowerCase()
+        .includes(filter.toLowerCase()) ||
+      (pkg.packageCode || "").toLowerCase().includes(filter.toLowerCase())
   );
 
   const userPackages = filteredPackages.filter((p) => {
@@ -101,7 +115,7 @@ const PackageDashboard = () => {
       "Receiver",
     ];
     const rows = data.map((p) => [
-      p.batchCode || p.batch?.crop || "",
+      p.batch?.crop || p.batch?.cropType || "",
       p.packageCode || "",
       p.weight ?? "",
       p.destination || "",
@@ -237,13 +251,44 @@ const PackageDashboard = () => {
   const handleView = (pkg) => setSelectedPackage(pkg);
   const closeModal = () => setSelectedPackage(null);
 
+  const canEditOrDelete =
+    selectedPackage &&
+    (user?.role?.toLowerCase() === "admin" ||
+      selectedPackage.user === user?.id ||
+      selectedPackage.user?.id === user?.id ||
+      selectedPackage.user?._id === user?.id);
+
   if (loading) return <p className="p-6 text-center">Loading packages...</p>;
+
+  // Helper to render farmer name safely whether populated object or id string
+  const renderFarmerName = (pkg) => {
+    const farmer = pkg?.batch?.farmer;
+    if (!farmer) return "N/A";
+    if (typeof farmer === "string") {
+      // backend returned only id
+      return farmer;
+    }
+    // farmer is an object
+    const first = farmer.firstName || farmer.name || "";
+    const last = farmer.lastName || "";
+    const full = `${first} ${last}`.trim();
+    return full || "N/A";
+  };
 
   return (
     <div className="p-6 max-w-6xl mx-auto">
       <h1 className="text-2xl font-bold mb-6 text-green-700">
         📦 Package Dashboard
       </h1>
+
+      <div className="flex justify-end mb-4">
+        <Link
+          to={`${basePath}/packages/stats`}
+          className="px-3 py-2 bg-blue-500 text-white rounded-lg hover:bg-blue-600 shadow text-sm"
+        >
+          📊 Statistics
+        </Link>
+      </div>
 
       {/* Stats Inline */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
@@ -295,17 +340,42 @@ const PackageDashboard = () => {
         >
           👤 My Packages
         </button>
-        <button
-          onClick={() => setView("stats")}
-          className={`px-4 py-2 rounded-lg border border-gray-400 ${
-            view === "stats"
-              ? "bg-blue-600 text-white"
-              : "bg-blue-100 text-blue-800 hover:bg-blue-200"
-          }`}
-        >
-          📊 Stats
-        </button>
       </div>
+
+      {/* Inline new package card */}
+      {newPackage && (
+        <div className="mb-6 p-4 border border-green-300 bg-green-50 rounded-lg shadow">
+          <h2 className="text-lg font-semibold text-green-800 mb-2">
+            🎉 New Package Created!
+          </h2>
+          <p>
+            <strong>Package Code:</strong> {newPackage.packageCode}
+          </p>
+          <p>
+            <strong>Crop:</strong> {newPackage.batch?.crop || "N/A"}
+          </p>
+          <p>
+            <strong>Weight:</strong> {newPackage.weight} kg
+          </p>
+          <p>
+            <strong>Batch Code:</strong> {newPackage.batch?.batchCode || "N/A"}
+          </p>
+
+          {/* backend-generated link / qrCode */}
+          {(newPackage.link || newPackage.qrCode) && (
+            <p className="mt-2">
+              <a
+                href={newPackage.link || newPackage.qrCode}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="text-blue-600 underline hover:text-blue-800"
+              >
+                🔗 View Traceability Link
+              </a>
+            </p>
+          )}
+        </div>
+      )}
 
       {/* Filter + CSV */}
       {(view === "all" || view === "my") && (
@@ -357,7 +427,7 @@ const PackageDashboard = () => {
                     {p.product?.charAt(0)?.toUpperCase() || "?"}
                   </div>
                   <div>
-                    <p className="font-medium text-green-700">{p.batch?.crop || "Unknown"}</p>
+                    <p className="font-medium text-green-700">{p.batch?.crop || p.batch?.cropType || "Unknown"}</p>
                     <p className="text-sm text-gray-500">
                       Code: {p.packageCode}
                     </p>
@@ -418,15 +488,6 @@ const PackageDashboard = () => {
               You haven’t created any packages yet 📦
             </p>
           ))}
-
-        {view === "stats" && (
-          <div className="text-center text-gray-700">
-            <p>Total Packages: {totalPackages}</p>
-            <p>Unique Products: {uniqueProducts}</p>
-            <p>Total Weight: {totalWeight} kg</p>
-            <p>My Packages: {myPackages}</p>
-          </div>
-        )}
       </div>
 
       {/* Selected Package Modal */}
@@ -459,6 +520,26 @@ const PackageDashboard = () => {
                 <strong>Packed By:</strong>{" "}
                 {selectedPackage.user?.name || "Unknown"}
               </p>
+              <p>
+                <strong>Farmer:</strong>{" "}
+                {renderFarmerName(selectedPackage)}
+              </p>
+              <p><strong>Source:</strong> {selectedPackage.batch?.collectionLocation|| "N/A"}</p>
+
+              {/* backend-generated link (qrCode or link) */}
+              {(selectedPackage.link || selectedPackage.qrCode) && (
+                <p>
+                  <strong>Traceability Link:</strong>{" "}
+                  <a
+                    href={selectedPackage.link || selectedPackage.qrCode}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="text-blue-600 underline hover:text-blue-800"
+                  >
+                    {selectedPackage.link || selectedPackage.qrCode}
+                  </a>
+                </p>
+              )}
             </div>
             {(isAdmin || isOwnerOf(selectedPackage)) && (
               <div className="flex justify-end gap-3 mt-5">
@@ -486,3 +567,4 @@ const PackageDashboard = () => {
 };
 
 export default PackageDashboard;
+

@@ -43,3 +43,15 @@ export const apiGetFarmerBatches = async (farmerId) => apiClient.get(`/farmers/$
 export const apiGetBatchPackages = async (batchId) => apiClient.get(`/batches/${batchId}/packages`);
 // Package → Scans
 export const apiGetPackageScans = async (packageId) => apiClient.get(`/packages/${packageId}/scans`);
+
+// Additional Queries
+// export const apiGetScansByPackage = async (packageId) =>
+//   apiClient.get(`/packages/${packageId}/scans`);
+
+export const apiGetPackageByCode = async (code) => {
+  return axios.get(`${API_BASE}/packages/code/${code}`);
+};
+
+export const apiGetScansByPackage = async (packageId) => {
+  return axios.get(`${API_BASE}/scans?filter=${JSON.stringify({ package: packageId })}`);
+};

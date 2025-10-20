@@ -11,9 +11,11 @@ const Nav = () => {
   return (
     <header className="fixed top-0 left-0 right-0 z-50 bg-white shadow-md h-[70px] flex items-center px-2">
       {/* Logo on the left */}
+      <Link to="/">
       <div className="flex items-center">
-        <img src={logo2} alt="Logo" className="w-[40%] h-[40%] object-cover ml-10" />
+        <img src={logo2} alt="Logo" className="w-[40%] h-[40%] object-cover ml-10 hover:scale-120 transition-transform" />
       </div>
+      </Link>
 
       {/* Title in the middle */}
       <div className="flex-1 flex justify-center items-center px-4 pr-50">

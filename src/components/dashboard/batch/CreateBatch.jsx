@@ -8,7 +8,7 @@ import { useAuth } from "../../../contexts/AuthContext";
 const CreateBatch = () => {
   const navigate = useNavigate();
   const { user } = useAuth();
-  const newBatch = navigate.location?.state?.newBatch || null;
+  const newBatch = location.state?.newBatch;
   
   const [form, setForm] = useState({
     farmer: "",
@@ -469,12 +469,25 @@ const CreateBatch = () => {
         </div>
 
         {/* Submit */}
-        <button
-          type="submit"
-          className="bg-green-700 hover:bg-green-800 text-white font-semibold px-4 py-3 rounded-lg w-full transition-all duration-200"
-        >
-          Create Batch
-        </button>
+        <div className="flex justify-end gap-4">
+          <button
+            type="button"
+            onClick={() =>
+              user?.role === "admin"
+                ? navigate("/dashboard/admin/batches") // ✅ fixed
+                : navigate("/dashboard/user/batches") // ✅ fixed
+            }
+            className="px-4 py-2 border border-gray-400 rounded hover:bg-gray-100"
+          >
+            Cancel
+          </button>
+          <button
+            type="submit"
+            className="px-4 py-2 bg-green-600 text-white rounded hover:bg-green-700"
+          >
+            Create Batch
+          </button>
+        </div>
       </form>
     </div>
   );

@@ -79,8 +79,10 @@ const exportToCSV = (data, filename = "farmers.csv") => {
 
   // Pick only needed fields
   const headers = ["Name", "Email", "Phone", "Address", "Farm Size", "Crop Type", "GPS", "ID Number", "Gender"];
-  const rows = data.map((f) => [
-    f.name || "",
+  const rows = data.map((f) => {
+  const name = `${f.firstName || ""} ${f.lastName || ""}`.trim();
+  return [
+    name,
     f.email || "",
     f.phone || "",
     f.address || "",
@@ -89,7 +91,8 @@ const exportToCSV = (data, filename = "farmers.csv") => {
     f.gpsAddress || "",
     f.idNumber || "",
     f.gender || "",
-  ]);
+  ];
+});
 
   const csvContent = [headers, ...rows].map((row) => row.join(",")).join("\n");
 

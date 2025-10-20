@@ -440,6 +440,9 @@ const filteredBatches = batches.filter((batch) => {
             .join(", ") ||
           "N/A"}
       </p>
+      <p className="text-s text-gray-600">
+          Received By: {newBatch.user?.name || "N/A"}
+        </p>
 
         <p className="text-s text-gray-600">
           Date:{" "}
@@ -600,7 +603,7 @@ const filteredBatches = batches.filter((batch) => {
               <p><strong>Batch Code:</strong> {selectedBatch.batchCode}</p>
               <p><strong>Quantity:</strong> {selectedBatch.quantity} kg</p>
               <p><strong>Location:</strong> {selectedBatch.collectionLocation}</p>
-              <p><strong>Receiver:</strong> {selectedBatch.user?.name || "Unknown"}</p>
+              <p><strong>Receiver:</strong> {user?.name || "Unknown"}</p>
               <p><strong>Farmer:</strong> {getFarmerNameFromBatch(selectedBatch)}</p>
             </div>
 
