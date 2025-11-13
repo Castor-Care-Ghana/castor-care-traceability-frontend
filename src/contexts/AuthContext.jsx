@@ -1,34 +1,29 @@
 import React, { createContext, useContext, useState, useEffect } from "react";
-import { getUserData } from "../services/auth"; // must handle axios calls
+import { getUserData } from "../services/auth"; // axios call to /users/me
 
 const AuthContext = createContext();
 
 export const AuthProvider = ({ children }) => {
   const [user, setUser] = useState(null);
+  const [token, setToken] = useState(localStorage.getItem("token") || null);
   const [loading, setLoading] = useState(true);
 
-  // Initialize authentication when app loads
+  // Initialize authentication on app load
   useEffect(() => {
     const initAuth = async () => {
       try {
-        const token = localStorage.getItem("token");
         if (!token) {
           setLoading(false);
           return;
         }
 
-        // ✅ Fetch user with token
         const res = await getUserData(token);
-
-        // Handle both { user } or raw object
         const userData = res?.data?.user || res?.data;
-        setUser(userData);
 
+        setUser(userData);
         localStorage.setItem("user", JSON.stringify(userData));
       } catch (err) {
         console.error("❌ Auth init failed:", err);
-
-        // ✅ Only clear if token is invalid
         if (err.response?.status === 401) {
           logout();
         }
@@ -38,33 +33,34 @@ export const AuthProvider = ({ children }) => {
     };
 
     initAuth();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [token]);
 
-  // ✅ login: save user + token
+  // Login: store token + user
   const login = (userData, token) => {
     if (token) {
       localStorage.setItem("token", token);
+      setToken(token);
     }
     localStorage.setItem("user", JSON.stringify(userData));
     setUser(userData);
   };
 
-  // ✅ logout: clear storage
+  // Logout: clear storage
   const logout = () => {
     localStorage.removeItem("user");
     localStorage.removeItem("token");
     setUser(null);
+    setToken(null);
   };
 
   return (
-    <AuthContext.Provider value={{ user, loading, login, logout }}>
+    <AuthContext.Provider value={{ user, token, loading, login, logout }}>
       {children}
     </AuthContext.Provider>
   );
 };
 
-// ✅ Custom hook
+// Custom hook
 export const useAuth = () => {
   const context = useContext(AuthContext);
   if (!context) {

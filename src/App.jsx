@@ -20,6 +20,7 @@ import UserDashboard from "./components/dashboard/UserDashboard";
 import Dashboard from "./components/dashboard/user/Dashboard";
 import CreateUser from "./components/dashboard/user/CreateUser";
 import MyAccount from "./components/dashboard/user/MyAccount";
+import UserPerformance from "./components/dashboard/user/UserPerformance";
 
 // FARMERS
 import FarmerDashboard from "./components/dashboard/farmer/farmerDashboard";
@@ -38,6 +39,7 @@ import PackageStats from "./components/dashboard/package/PackageStats";
 // SCANS
 import ScanDashboard from "./components/dashboard/scan/scanDashboard";
 import PerformScan from "./components/dashboard/scan/PerformScan";
+
 
 // ✅ Corrected Router
 const router = createBrowserRouter([
@@ -75,6 +77,7 @@ const router = createBrowserRouter([
           { path: "users", element: <Dashboard /> },
           { path: "users/create", element: <CreateUser /> },
           { path: "users/me", element: <MyAccount /> },
+          { path: "users/performance", element: <UserPerformance /> },
 
           { path: "farmers", element: <FarmerDashboard /> },
           { path: "farmers/create", element: <CreateFarmer /> },

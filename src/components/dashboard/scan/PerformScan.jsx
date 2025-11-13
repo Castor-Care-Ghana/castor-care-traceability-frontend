@@ -266,6 +266,8 @@ const PerformScan = () => {
                 <option value="available">Available</option>
                 <option value="sold">Sold</option>
                 <option value="in-transit">In-transit</option>
+                <option value="delivered">Delivered</option>
+                <option value="returned">Returned</option>
               </select>
             ) : (
               <div className="text-sm px-3 py-1 bg-gray-100 rounded-full inline-block">
@@ -291,11 +293,11 @@ const PerformScan = () => {
         {/* Location */}
         <div>
           <label className="block mb-2 text-gray-700 font-medium">
-            Location (GhanaPost GPS)
+            Location
           </label>
           <input
             type="text"
-            placeholder="e.g. GA-569-2502"
+            placeholder="e.g. address or gps"
             value={location}
             onChange={(e) => setLocation(e.target.value)}
             className="w-full border border-gray-300 rounded-lg px-4 py-2 focus:outline-none focus:ring-2 focus:ring-green-600"

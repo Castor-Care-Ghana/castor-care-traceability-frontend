@@ -1,4 +1,3 @@
-// src/components/dashboard/package/PackageDashboard.jsx
 import React, { useEffect, useState } from "react";
 import { useAuth } from "../../../contexts/AuthContext";
 import { useLocation, Link } from "react-router-dom";
@@ -7,6 +6,7 @@ import {
   apiGetPackages,
   apiUpdatePackage,
   apiDeletePackage,
+  apiGetFarmers,
 } from "../../../services/traceability";
 
 const PackageDashboard = () => {
@@ -18,19 +18,81 @@ const PackageDashboard = () => {
   const [view, setView] = useState("");
   const [selectedPackage, setSelectedPackage] = useState(null);
   const [loading, setLoading] = useState(true);
+  const [farmers, setFarmers] = useState([]);
+  const [newPackage, setNewPackage] = useState(location.state?.newPackage || null);
 
-  const newPackage = location.state?.newPackage;
-
+  // fetch farmers once
   useEffect(() => {
-    // if a newPackage was passed through location state, open modal for it
-    if (location.state?.newPackage) {
-      setSelectedPackage(location.state.newPackage);
-    }
+    const fetchFarmers = async () => {
+      try {
+        const res = await apiGetFarmers();
+        setFarmers(res?.data || res || []);
+      } catch (err) {
+        console.error("❌ Error fetching farmers:", err);
+      }
+    };
+    fetchFarmers();
+  }, []);
+
+  // normalize + fetch latest newPackage
+  useEffect(() => {
+    const np = location.state?.newPackage;
+    if (!np) return;
+
+    const normalize = (pkg) => {
+      const batch = typeof pkg.batch === "string" ? { id: pkg.batch } : (pkg.batch || {});
+      const farmer =
+        typeof pkg.farmer === "string"
+          ? { id: pkg.farmer }
+          : pkg.farmer || pkg.batch?.farmer || {};
+
+      return {
+        ...pkg,
+        id: pkg.id ?? pkg._id,
+        batch: {
+          ...batch,
+          crop: batch.crop ?? batch.cropType ?? null,
+          batchCode: batch.batchCode ?? null,
+          farmer,
+        },
+        farmer,
+        user: typeof pkg.user === "string" ? { id: pkg.user } : (pkg.user || {}),
+        product: batch.crop ?? null,
+      };
+    };
+
+    // if backend already saved, re-fetch to ensure consistency
+    const fetchLatest = async (id) => {
+      try {
+        const res = await apiGetPackages();
+        const arr =
+          Array.isArray(res?.data?.data) ? res.data.data :
+          Array.isArray(res?.data) ? res.data :
+          Array.isArray(res) ? res :
+          Array.isArray(res?.data?.packages) ? res.data.packages :
+          [];
+        const match = arr.find((p) => (p.id ?? p._id) === id);
+        if (match) {
+          const normalized = normalize(match);
+          setNewPackage(normalized);
+          setSelectedPackage(normalized);
+          return;
+        }
+      } catch (err) {
+        console.error("❌ Error fetching new package:", err);
+      }
+      // fallback: just normalize the passed object
+      const normalized = normalize(np);
+      setNewPackage(normalized);
+      setSelectedPackage(normalized);
+    };
+
+    fetchLatest(np.id ?? np._id);
   }, [location.state]);
 
   const basePath = `/dashboard/${user?.role?.toLowerCase()}`;
 
-  // Helpers
+  // helpers
   const getId = (obj) =>
     typeof obj === "string" ? obj : obj?.id ?? obj?._id ?? null;
 
@@ -41,12 +103,11 @@ const PackageDashboard = () => {
     return uid && pu && String(uid) === String(pu);
   };
 
-  // Fetch packages
+  // fetch packages
   const fetchPackages = async () => {
     setLoading(true);
     try {
       const res = await apiGetPackages();
-      // support various response shapes: res.data, res.data.data, or array returned directly
       const arr =
         Array.isArray(res?.data?.data) ? res.data.data :
         Array.isArray(res?.data) ? res.data :
@@ -55,11 +116,31 @@ const PackageDashboard = () => {
         [];
 
       setPackages(
-        arr.map((p) => ({
-          ...p,
-          id: p.id ?? p._id,
-          product: p.batch?.crop ?? p.batch?.cropType ?? "Unknown Crop",
-        }))
+        arr.map((p) => {
+          const batch = typeof p.batch === "string" ? { id: p.batch } : (p.batch || {});
+          const pkgUser = typeof p.user === "string" ? { id: p.user } : (p.user || {});
+
+          let farmer = {};
+          if (typeof (p.farmer || p.batch?.farmer) === "string") {
+            farmer = { id: p.farmer || p.batch?.farmer };
+          } else {
+            farmer = p.farmer || p.batch?.farmer || {};
+          }
+
+          return {
+            ...p,
+            id: p.id ?? p._id,
+            batch: {
+              ...batch,
+              farmer,
+              crop: batch.crop ?? batch.cropType ?? null,
+              batchCode: batch.batchCode ?? null,
+            },
+            farmer,
+            user: pkgUser,
+            product: batch.crop ?? null,
+          };
+        })
       );
     } catch (err) {
       console.error("❌ Error fetching packages:", err);
@@ -73,7 +154,7 @@ const PackageDashboard = () => {
     fetchPackages();
   }, []);
 
-  // Filter logic (case-insensitive)
+  // filter
   const filteredPackages = packages.filter(
     (pkg) =>
       (pkg.batch?.crop || pkg.batch?.cropType || "")
@@ -88,15 +169,13 @@ const PackageDashboard = () => {
     return uid && pu && String(uid) === String(pu);
   });
 
-  // Stats
+  // stats
   const totalPackages = packages.length;
   const totalWeight = packages.reduce((sum, p) => sum + (p.weight || 0), 0);
-  const uniqueProducts = [
-    ...new Set(packages.map((p) => p.product || "")),
-  ].length;
+  const uniqueProducts = [...new Set(packages.map((p) => p.product || ""))].length;
   const myPackages = userPackages.length;
 
-  // Export CSV
+  // csv export
   const escapeCell = (val) => {
     if (val === null || val === undefined) return '""';
     return `"${String(val).replace(/"/g, '""')}"`;
@@ -111,24 +190,22 @@ const PackageDashboard = () => {
       "Product",
       "Package Code",
       "Weight",
+      "Packaged By",
       "Destination",
-      "Receiver",
     ];
     const rows = data.map((p) => [
-      p.batch?.crop || p.batch?.cropType || "",
+      p.batch?.crop || "",
       p.packageCode || "",
       p.weight ?? "",
-      p.destination || "",
       p.user?.name || "Unknown",
+      p.destination || "",
     ]);
     const csvLines = [
       headers.map(escapeCell).join(","),
       ...rows.map((r) => r.map(escapeCell).join(",")),
     ];
     const csvContent = "\uFEFF" + csvLines.join("\r\n");
-    const blob = new Blob([csvContent], {
-      type: "text/csv;charset=utf-8;",
-    });
+    const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" });
     const link = document.createElement("a");
     link.href = URL.createObjectURL(blob);
     link.download = filename;
@@ -137,7 +214,7 @@ const PackageDashboard = () => {
     link.remove();
   };
 
-  // Edit
+  // edit
   const handleEdit = async (pkg) => {
     const pkgId = pkg?.id || pkg?._id;
     if (!pkgId) {
@@ -145,18 +222,12 @@ const PackageDashboard = () => {
       return;
     }
     if (!isAdmin && !isOwnerOf(pkg)) {
-      Swal.fire(
-        "Unauthorized",
-        "You can only edit your own packages.",
-        "warning"
-      );
+      Swal.fire("Unauthorized", "You can only edit your own packages.", "warning");
       return;
     }
 
     const safe = (v) =>
-      v === undefined || v === null
-        ? ""
-        : String(v).replace(/"/g, "&quot;");
+      v === undefined || v === null ? "" : String(v).replace(/"/g, "&quot;");
 
     const { value: formValues } = await Swal.fire({
       title: "Edit Package",
@@ -179,7 +250,7 @@ const PackageDashboard = () => {
           )}" disabled
             class="w-full border border-gray-300 rounded-lg px-3 py-2 bg-gray-100 text-gray-500" />
 
-            <label class="text-sm text-gray-600">Batch Code</label>
+          <label class="text-sm text-gray-600">Batch Code</label>
           <input type="text" value="${safe(
             pkg.batch?.batchCode
           )}" disabled
@@ -206,23 +277,15 @@ const PackageDashboard = () => {
       setSelectedPackage(null);
     } catch (err) {
       console.error("❌ Edit error:", err);
-      Swal.fire(
-        "Error",
-        err?.response?.data?.message || err.message,
-        "error"
-      );
+      Swal.fire("Error", err?.response?.data?.message || err.message, "error");
     }
   };
 
-  // Delete
+  // delete
   const handleDelete = async (id, pkgUser) => {
     const isOwner = String(getId(pkgUser)) === String(getId(user));
     if (!isAdmin && !isOwner) {
-      Swal.fire(
-        "Unauthorized",
-        "You can only delete your own packages.",
-        "warning"
-      );
+      Swal.fire("Unauthorized", "You can only delete your own packages.", "warning");
       return;
     }
 
@@ -251,29 +314,19 @@ const PackageDashboard = () => {
   const handleView = (pkg) => setSelectedPackage(pkg);
   const closeModal = () => setSelectedPackage(null);
 
-  const canEditOrDelete =
-    selectedPackage &&
-    (user?.role?.toLowerCase() === "admin" ||
-      selectedPackage.user === user?.id ||
-      selectedPackage.user?.id === user?.id ||
-      selectedPackage.user?._id === user?.id);
-
-  if (loading) return <p className="p-6 text-center">Loading packages...</p>;
-
-  // Helper to render farmer name safely whether populated object or id string
+   // render farmer name
   const renderFarmerName = (pkg) => {
-    const farmer = pkg?.batch?.farmer;
-    if (!farmer) return "N/A";
-    if (typeof farmer === "string") {
-      // backend returned only id
-      return farmer;
+    const farmerData = pkg?.farmer || pkg?.batch?.farmer;
+    const farmerId = getId(farmerData);
+    if (!farmerId) return "Unknown Farmer";
+
+    const farmer = farmers.find((f) => getId(f) === farmerId);
+    if (farmer) {
+      return `${farmer.firstName ?? ""} ${farmer.lastName ?? ""}`.trim() || "Unnamed Farmer";
     }
-    // farmer is an object
-    const first = farmer.firstName || farmer.name || "";
-    const last = farmer.lastName || "";
-    const full = `${first} ${last}`.trim();
-    return full || "N/A";
+    return `Farmer ID: ${farmerId}`;
   };
+  if (loading) return <p className="p-6 text-center">Loading packages...</p>;
 
   return (
     <div className="p-6 max-w-6xl mx-auto">
@@ -290,7 +343,7 @@ const PackageDashboard = () => {
         </Link>
       </div>
 
-      {/* Stats Inline */}
+      {/* Stats */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
         <div className="bg-green-100 p-2 rounded-lg shadow text-center">
           <p className="text-xl font-bold text-green-700">{totalPackages}</p>
@@ -301,9 +354,7 @@ const PackageDashboard = () => {
           <p className="text-sm text-gray-600">Unique Products</p>
         </div>
         <div className="bg-yellow-100 p-2 rounded-lg shadow text-center">
-          <p className="text-xl font-bold text-yellow-700">
-            {totalWeight} kg
-          </p>
+          <p className="text-xl font-bold text-yellow-700">{totalWeight} kg</p>
           <p className="text-sm text-gray-600">Total Weight</p>
         </div>
         <div className="bg-purple-100 p-2 rounded-lg shadow text-center">
@@ -312,7 +363,7 @@ const PackageDashboard = () => {
         </div>
       </div>
 
-      {/* Action Buttons */}
+      {/* Buttons */}
       <div className="flex gap-4 mb-8">
         <Link
           to={`${basePath}/packages/create`}
@@ -321,7 +372,10 @@ const PackageDashboard = () => {
           ➕ Create Package
         </Link>
         <button
-          onClick={() => setView("all")}
+          onClick={() => {
+            setView("all");
+            setNewPackage(null); // clear inline card
+          }}
           className={`px-4 py-2 rounded-lg border border-gray-400 ${
             view === "all"
               ? "bg-green-600 text-white"
@@ -331,7 +385,10 @@ const PackageDashboard = () => {
           📋 Show All Packages
         </button>
         <button
-          onClick={() => setView("my")}
+          onClick={() => {
+            setView("my");
+            setNewPackage(null); // clear inline card
+          }}
           className={`px-4 py-2 rounded-lg border border-gray-400 ${
             view === "my"
               ? "bg-green-600 text-white"
@@ -342,41 +399,43 @@ const PackageDashboard = () => {
         </button>
       </div>
 
-      {/* Inline new package card */}
+      {/* Inline new package */}
       {newPackage && (
-        <div className="mb-6 p-4 border border-green-300 bg-green-50 rounded-lg shadow">
-          <h2 className="text-lg font-semibold text-green-800 mb-2">
-            🎉 New Package Created!
-          </h2>
-          <p>
-            <strong>Package Code:</strong> {newPackage.packageCode}
-          </p>
-          <p>
-            <strong>Crop:</strong> {newPackage.batch?.crop || "N/A"}
-          </p>
-          <p>
-            <strong>Weight:</strong> {newPackage.weight} kg
-          </p>
-          <p>
-            <strong>Batch Code:</strong> {newPackage.batch?.batchCode || "N/A"}
-          </p>
+        <div className="mb-6 p-4 border border-green-300 bg-green-50 rounded-lg shadow flex justify-between items-center">
+          <div>
+            <h2 className="text-lg font-semibold text-green-800 mb-2">
+              🎉 New Package Created!
+            </h2>
+            <p><strong>Package Code:</strong> {newPackage.packageCode}</p>
+            <p><strong>Crop:</strong> {newPackage.batch?.crop || newPackage.batch?.cropType || "N/A"}</p>
+            <p><strong>Weight:</strong> {newPackage.weight} kg</p>
+            <p><strong>Batch Code:</strong> {newPackage.batch?.batchCode || "N/A"}</p>
+            <p><strong>Farmer:</strong> {renderFarmerName(newPackage)}</p>
+            {(newPackage.link || newPackage.qrCode) && (
+              <p className="mt-2">
+                <a
+                  href={newPackage.link || newPackage.qrCode}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="text-blue-600 underline hover:text-blue-800"
+                >
+                  🔗 View Traceability Link
+                </a>
+              </p>
+            )}
+          </div>
 
-          {/* backend-generated link / qrCode */}
-          {(newPackage.link || newPackage.qrCode) && (
-            <p className="mt-2">
-              <a
-                href={newPackage.link || newPackage.qrCode}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="text-blue-600 underline hover:text-blue-800"
-              >
-                🔗 View Traceability Link
-              </a>
-            </p>
+          {newPackage.qrCode && (
+            <div className="ml-6 flex-shrink-0">
+              <img
+                src={newPackage.qrCode}
+                alt="QR Code"
+                className="w-28 h-28 border border-gray-300 rounded-lg shadow"
+              />
+            </div>
           )}
         </div>
       )}
-
       {/* Filter + CSV */}
       {(view === "all" || view === "my") && (
         <div className="flex items-center justify-between mb-4">
@@ -384,13 +443,16 @@ const PackageDashboard = () => {
             {view === "all" ? "All Packages" : "My Packages"}
           </h2>
           <div className="flex items-center gap-3">
+            <div className="relative w-40">
+              <span className="absolute inset-y-0 left-2 flex items-center text-gray-400">🔍</span>
             <input
               type="text"
               placeholder="Filter packages..."
               value={filter}
               onChange={(e) => setFilter(e.target.value)}
-              className="w-40 pl-3 pr-3 py-2 border border-gray-300 rounded-md shadow-sm focus:ring-2 focus:ring-green-500"
-            />
+              className="w-full pl-8 pr-1 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-2 focus:ring-green-500 focus:border-green-500"
+              />
+            </div>
             <button
               onClick={() =>
                 exportToCSV(

@@ -127,7 +127,7 @@ const Sidebar = () => {
       </div>
 
       {/* Menu Items */}
-      <nav className="flex-1 p-4">
+      <nav className="flex-1 p-2">
         <ul className="space-y-2">
           {menuItems.map((item) => {
             const Icon = item.icon;
@@ -146,7 +146,7 @@ const Sidebar = () => {
                       : "text-gray-600 hover:bg-green-50 hover:text-green-700"
                   }`}
                 >
-                  <Icon className="w-5 h-5" />
+                  <Icon className="w-4 h-4" />
                   {!collapsed && <span className="font-medium">{item.label}</span>}
                 </button>
               </li>

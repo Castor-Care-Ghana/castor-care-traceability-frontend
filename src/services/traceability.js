@@ -5,8 +5,19 @@ import { apiClient } from "./config";
 export const apiGetUsers = async () => apiClient.get("/users");
 export const apiGetUserById = async (id) => apiClient.get(`/users/${id}`);
 export const apiCreateUser = async (payload) => apiClient.post("/users", payload);
-export const apiUpdateUser = async (id, payload) => apiClient.patch(`/users/${id}`, payload);
+export const apiUpdateUser = async (id, payload, token) => {
+  // if payload is FormData (for avatar), set proper headers
+  const isFormData = payload instanceof FormData;
+  return apiClient.patch(`/users/${id}`, payload, {
+    headers: {
+      Authorization: `Bearer ${token}`,
+      ...(isFormData ? { "Content-Type": "multipart/form-data" } : {}),
+    },
+  });
+};
 export const apiDeleteUser = async (id) => apiClient.delete(`/users/${id}`);
+export const apiRemoveUser = async (id) => apiClient.delete(`/users/${id}/remove`);
+export const apiRestoreUser = async (id) => apiClient.patch(`/users/${id}/restore`);
 
 // ===================== FARMERS =====================
 export const apiGetFarmers = async () => apiClient.get("/farmers");

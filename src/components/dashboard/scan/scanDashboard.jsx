@@ -144,13 +144,21 @@ const ScanDashboard = () => {
         <div class="flex flex-col gap-3 text-left">
           <input id="swal-package" type="text" placeholder="Package ID"
             value="${scan.packageId || ""}"
-            class="w-full border border-gray-300 rounded-lg px-3 py-2 placeholder-gray-500 focus:ring-2 focus:ring-green-600 focus:outline-none" required />
+            class="w-full border border-gray-300 rounded-lg px-3 py-2 placeholder-gray-500 focus:ring-2 focus:ring-green-600 focus:outline-none" disabled />
           <input id="swal-scannedBy" type="text" placeholder="Scanned By"
             value="${scan.scannedBy || ""}"
-            class="w-full border border-gray-300 rounded-lg px-3 py-2 placeholder-gray-500 focus:ring-2 focus:ring-green-600 focus:outline-none" required />
+            class="w-full border border-gray-300 rounded-lg px-3 py-2 placeholder-gray-500 focus:ring-2 focus:ring-green-600 focus:outline-none" disabled />
           <input id="swal-location" type="text" placeholder="Location"
             value="${scan.location || ""}"
             class="w-full border border-gray-300 rounded-lg px-3 py-2 placeholder-gray-500 focus:ring-2 focus:ring-green-600 focus:outline-none" />
+            <select id="swal-status" class="w-full border border-gray-300 rounded-lg px-3 py-2 placeholder-gray-500 focus:ring-2 focus:ring-green-600 focus:outline-none">
+              <option value="" disabled ${!scan.status ? "selected" : ""}>Select Status</option>
+              <option value="sold" ${scan.status === "sold" ? "selected" : ""}>Sold</option>
+              <option value="in transit" ${scan.status === "in transit" ? "selected" : ""}>In Transit</option>
+              <option value="delivered" ${scan.status === "delivered" ? "selected" : ""}>Delivered</option>
+              <option value="returned" ${scan.status === "returned" ? "selected" : ""}>Returned</option>
+              <option value="available" ${scan.status === "available" ? "selected" : ""}>Available</option>
+            </select>
         </div>
       `,
       focusConfirm: false,
@@ -163,6 +171,7 @@ const ScanDashboard = () => {
           package: getVal("swal-package"),
           scannedBy: getVal("swal-scannedBy"),
           location: getVal("swal-location"),
+          status: getVal("swal-status"),
         };
       },
     });
@@ -171,9 +180,8 @@ const ScanDashboard = () => {
 
     try {
       const payload = {
-        package: formValues.package,
-        scannedBy: formValues.scannedBy,
         location: formValues.location,
+        status: formValues.status,
       };
 
       await apiUpdateScan(scanId, payload);
